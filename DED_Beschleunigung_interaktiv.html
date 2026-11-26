@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="de">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>DED – Beschleunigung der Auftragseinheit</title>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.19.1/dist/katex.min.css"
+              integrity="sha384-WwGtaC6ywCHxA5cstpj/3+xIZvTez8dq2IcBQaXRkenHZ7FVVq1ZROtURwfbtTlG" crossorigin="anonymous">
+        <script defer src="https://cdn.jsdelivr.net/npm/katex@0.19.1/dist/katex.min.js"
+                integrity="sha384-a1WQdjRj162i159OYq041X6I4K8NenkrI09LlPmiHg0YOb7CR+wJOraXwK9abpnE" crossorigin="anonymous"></script>
+        <style>
+            * {
+                box-sizing: border-box;
+            }
+
+            :root {
+                --ink: #243447;
+                --muted: #526171;
+                --line: #d7dfe7;
+                --slide: #2367a0;
+                --nozzle: #cf7724;
+                --force: #b42329;
+            }
+
+            body {
+                margin: 0;
+                background: #fff;
+                color: var(--ink);
+                font: 16px system-ui, sans-serif;
+            }
+
+            main {
+                max-width: 1440px;
+                margin: auto;
+                padding: 8px 14px;
+            }
+
+            .math {
+                font-family: "CMU Serif", "Latin Modern Roman", "STIX Two Text", "Cambria Math", "Times New Roman", serif;
+            }
+
+            .math .katex {
+                font-size: 1.08em;
+            }
+
+            .controls {
+                display: grid;
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+                gap: 8px 22px;
+                padding-bottom: 8px;
+                border-bottom: 1px solid var(--line);
+            }
+
+            .parameter {
+                min-width: 0;
+            }
+
+            .parameter label {
+                display: flex;
+                justify-content: space-between;
+                align-items: baseline;
+                gap: 6px;
+                font-size: 15px;
+            }
+
+            output {
+                font-variant-numeric: tabular-nums;
+                white-space: nowrap;
+            }
+
+            input[type="range"] {
+                display: block;
+                width: 100%;
+                height: 22px;
+                margin: 3px 0 0;
+                accent-color: var(--slide);
+                cursor: pointer;
+            }
+
+            .toolbar {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 8px 16px;
+                padding: 7px 0;
+                font-size: 14px;
+            }
+
+            .toolbar label {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            select, button {
+                background: white;
+                color: var(--ink);
+                font: inherit;
+                border: 1px solid #aebac5;
+                border-radius: 4px;
+                padding: 4px 8px;
+                cursor: pointer;
+            }
+
+            #reset {
+                margin-left: auto;
+            }
+
+            .metrics {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: baseline;
+                gap: 5px 25px;
+                padding: 5px 0 9px;
+                border-bottom: 1px solid var(--line);
+                font-size: 15px;
+            }
+
+            .metrics > span {
+                white-space: nowrap;
+            }
+
+            .plots {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                column-gap: 22px;
+                row-gap: 8px;
+                padding-top: 8px;
+            }
+
+            figure {
+                margin: 0;
+                min-width: 0;
+            }
+
+            figcaption {
+                display: flex;
+                align-items: baseline;
+                justify-content: space-between;
+                flex-wrap: wrap;
+                gap: 3px 8px;
+                font-size: 15px;
+                font-weight: 600;
+            }
+
+            .legend {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 6px 12px;
+                font-size: 14px;
+                font-weight: 400;
+            }
+
+            .legend > span {
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+            }
+
+            .sample {
+                display: inline-block;
+                width: 22px;
+                border-top: 2.5px solid currentColor;
+            }
+
+            .slide { color: var(--slide); }
+            .nozzle { color: var(--nozzle); }
+            .force { color: var(--force); }
+            .reference { color: #78838e; }
+            .dashed { border-top-style: dashed; }
+
+            .graph {
+                display: block;
+                width: 100%;
+                height: clamp(110px, calc((100vh - 290px) / 2), 250px);
+                overflow: visible;
+            }
+
+            .note {
+                color: var(--muted);
+                margin: 5px 0 0;
+                font-size: 12px;
+            }
+
+            @media (max-width: 700px) {
+                .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+                .plots { grid-template-columns: 1fr; }
+                .graph { height: 190px; }
+            }
+
+            @media (max-height: 570px) and (min-width: 701px) {
+                main { padding: 4px 10px; }
+                .graph { height: clamp(105px, calc((100vh - 265px) / 2), 155px); }
+                .plots { row-gap: 3px; }
+                .toolbar { padding: 4px 0; }
+                .metrics { padding: 4px 0; }
+            }
+        </style>
+    </head>
+    <body>
+        <main>
+            <!-- Einstellbare Modellparameter; Startwerte und Grenzen hier ändern. -->
+            <section class="controls" aria-label="Modellparameter">
+                <div class="parameter">
+                    <label for="mS"><span>Schlitten <span class="math" data-tex="m_S"><i>m</i><sub>S</sub></span></span><output id="mSOut"></output></label>
+                    <input id="mS" type="range" min="40" max="180" step="5" value="95">
+                </div>
+                <div class="parameter">
+                    <label for="mD"><span>Düse <span class="math" data-tex="m_D"><i>m</i><sub>D</sub></span></span><output id="mDOut"></output></label>
+                    <input id="mD" type="range" min="5" max="60" step="1" value="25">
+                </div>
+                <div class="parameter">
+                    <label for="c"><span>Steifigkeit <span class="math" data-tex="\tilde c"><i>c̃</i></span></span><output id="cOut"></output></label>
+                    <input id="c" type="range" min="500" max="25000" step="0.25" value="10631.25">
+                </div>
+                <div class="parameter">
+                    <label for="a"><span>Beschleunigung <span class="math" data-tex="a_0"><i>a</i><sub>0</sub></span></span><output id="aOut"></output></label>
+                    <input id="a" type="range" min="0" max="30" step="1" value="10">
+                </div>
+            </section>
+
+            <div class="toolbar">
+                <label for="duration">Zeitbereich
+                    <select id="duration">
+                        <option value="10">0–10 ms</option>
+                        <option value="20">0–20 ms</option>
+                        <option value="40" selected>0–40 ms</option>
+                        <option value="80">0–80 ms</option>
+                        <option value="150">0–150 ms</option>
+                    </select>
+                </label>
+                <label for="kinMode">Kinematik
+                    <select id="kinMode">
+                        <option value="velocity" selected>Geschwindigkeiten</option>
+                        <option value="acceleration">Beschleunigungen</option>
+                    </select>
+                </label>
+                <button id="reset" type="button">Ausgangswerte</button>
+            </div>
+
+            <section class="metrics" aria-label="Charakteristische Größen">
+                <span><span class="math" data-tex="\omega_0=\sqrt{\tilde c/m_D}=">ω₀ = √(c̃/mᴅ) =</span> <output id="omega"></output></span>
+                <span><span class="math" data-tex="T_0=">T₀ =</span> <output id="period"></output></span>
+                <span><span class="math" data-tex="|\tilde x_D|_{\max}=">|x̃ᴅ|ₘₐₓ =</span> <output id="maxRel"></output></span>
+            </section>
+
+            <section class="plots" aria-label="Zeitverläufe">
+                <figure>
+                    <figcaption>
+                        Absolute Positionen [mm]
+                        <span class="legend">
+                            <span class="slide"><i class="sample"></i><span class="math" data-tex="x_S"><i>x</i><sub>S</sub></span></span>
+                            <span class="nozzle"><i class="sample dashed"></i><span class="math" data-tex="x_D"><i>x</i><sub>D</sub></span></span>
+                        </span>
+                    </figcaption>
+                    <svg id="positions" class="graph" role="img" aria-label="Absolute Positionen von Schlitten und Düse"></svg>
+                </figure>
+                <figure>
+                    <figcaption>
+                        Relative Auslenkung [mm]
+                        <span class="legend">
+                            <span class="nozzle"><i class="sample"></i><span class="math" data-tex="\tilde x_D=x_D-x_S"><i>x̃</i><sub>D</sub> = <i>x</i><sub>D</sub> − <i>x</i><sub>S</sub></span></span>
+                            <span class="reference"><i class="sample dashed"></i><span class="math" data-tex="-a_0/\omega_0^2">−a₀/ω₀²</span></span>
+                        </span>
+                    </figcaption>
+                    <svg id="relative" class="graph" role="img" aria-label="Relative Auslenkung der Düse"></svg>
+                </figure>
+                <figure>
+                    <figcaption>
+                        <span id="kinTitle">Geschwindigkeiten [mm/s]</span>
+                        <span id="velocityLegend" class="legend">
+                            <span class="slide"><i class="sample"></i><span class="math" data-tex="\dot x_S">ẋ<sub>S</sub></span></span>
+                            <span class="nozzle"><i class="sample dashed"></i><span class="math" data-tex="\dot x_D">ẋ<sub>D</sub></span></span>
+                        </span>
+                        <span id="accelerationLegend" class="legend" style="display: none">
+                            <span class="slide"><i class="sample"></i><span class="math" data-tex="\ddot x_S">ẍ<sub>S</sub></span></span>
+                            <span class="nozzle"><i class="sample dashed"></i><span class="math" data-tex="\ddot x_D">ẍ<sub>D</sub></span></span>
+                        </span>
+                    </figcaption>
+                    <svg id="kinematics" class="graph" role="img" aria-label="Kinematische Größen von Schlitten und Düse"></svg>
+                </figure>
+                <figure>
+                    <figcaption>
+                        Antriebskraft [N]
+                        <span class="legend">
+                            <span class="force"><i class="sample"></i><span class="math" data-tex="F(t)"><i>F</i>(<i>t</i>)</span></span>
+                            <span class="reference"><i class="sample dashed"></i><span class="math" data-tex="(m_S+m_D)a_0">(mₛ+mᴅ)a₀</span></span>
+                        </span>
+                    </figcaption>
+                    <svg id="forcePlot" class="graph" role="img" aria-label="Erforderliche Antriebskraft"></svg>
+                </figure>
+            </section>
+            <p class="note">Konstante Schlittenbeschleunigung ab t = 0; anfangs in Ruhe und unverformt. Masseloses, linear-elastisches Distanzstück; keine Dämpfung oder Reibung. Achsen automatisch skaliert. Maximalauslenkung für anhaltende Beschleunigung.</p>
+            <p class="note" id="fontstatus" hidden>KaTeX nicht verfügbar; mathematische Beschriftungen erscheinen in Ersatzschrift.</p>
+        </main>
+
+        <script>
+            const $ = id => document.getElementById(id);
+            const parameterIds = ['mS', 'mD', 'c', 'a', 'duration', 'kinMode'];
+            const defaults = Object.fromEntries(parameterIds.map(id => [id, $(id).value]));
+            const colors = {
+                slide: '#2367a0',
+                nozzle: '#cf7724',
+                force: '#b42329',
+                reference: '#78838e'
+            };
+
+            function format(value, digits = 2) {
+                return value.toLocaleString('de-DE', {
+                    maximumFractionDigits: digits,
+                    minimumFractionDigits: 0
+                });
+            }
+
+            // Alle Rechnungen in SI-Einheiten; Umrechnung nur für die Diagramme.
+            function model(t, mS, mD, c, a0) {
+                const omega = Math.sqrt(c / mD);
+                const phase = omega * t;
+
+                // 1 - cos(phase) in numerisch stabiler Form.
+                const oneMinusCos = 2 * Math.sin(phase / 2) ** 2;
+                const rel = -a0 / omega ** 2 * oneMinusCos;
+                const relV = -a0 / omega * Math.sin(phase);
+                const xS = 0.5 * a0 * t ** 2;
+                const vS = a0 * t;
+
+                return {
+                    xS: xS,
+                    xD: xS + rel,
+                    rel: rel,
+                    vS: vS,
+                    vD: vS + relV,
+                    aS: a0,
+                    aD: a0 * oneMinusCos,
+                    F: mS * a0 - c * rel
+                };
+            }
+
+            // Sinnvolle Achsenteilung mit 1, 2, 2.5, 5 oder 10 als Mantisse.
+            function niceStep(raw) {
+                const power = 10 ** Math.floor(Math.log10(raw));
+                const fraction = raw / power;
+                const mantissa = [1, 2, 2.5, 5, 10].find(n => n >= fraction - 1e-12);
+                return mantissa * power;
+            }
+
+            function tickText(value, step) {
+                const digits = Math.max(0, Math.ceil(-Math.log10(step)) + 1);
+                return format(Math.abs(value) < step * 1e-9 ? 0 : value, Math.min(7, digits));
+            }
+
+            // SVG-Hilfsfunktion: keine Bibliothek außer KaTeX erforderlich.
+            function svgElement(tag, attributes = {}, text = null) {
+                const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+                for (const [name, value] of Object.entries(attributes)) {
+                    el.setAttribute(name, value);
+                }
+                if (text !== null) el.textContent = text;
+                return el;
+            }
+
+            function plot(id, samples, curves, durationMs, extent, reference = null) {
+                const svg = $(id);
+                // Pixelbasierte ViewBox: Schrift bleibt bei variabler Fenstergröße lesbar.
+                const W = Math.max(260, Math.round(svg.clientWidth || 480));
+                const H = Math.max(110, Math.round(svg.clientHeight || 180));
+                const left = 64;
+                const right = W - 17;
+                const top = 9;
+                const bottom = H - 31;
+                svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+                svg.replaceChildren();
+
+                let [min, max] = extent;
+                if (max - min < 1e-12) {
+                    // Auch a0 = 0 bleibt als Nulllinie sinnvoll darstellbar.
+                    min = 0;
+                    max = 1;
+                }
+                const step = niceStep((max - min) / 4);
+                const lo = Math.floor(min / step + 1e-10) * step;
+                const hi = Math.ceil(max / step - 1e-10) * step;
+                const y = v => bottom - (v - lo) / (hi - lo) * (bottom - top);
+                const x = t => left + t / durationMs * (right - left);
+
+                const append = (tag, attrs, text) => svg.appendChild(svgElement(tag, attrs, text));
+                const font = { 'font-size': 13, fill: '#526171', 'font-family': 'system-ui, sans-serif' };
+
+                for (let i = 0; i <= Math.round((hi - lo) / step); i++) {
+                    const value = lo + i * step;
+                    const py = y(value);
+                    append('line', { x1: left, y1: py, x2: right, y2: py, stroke: '#dce3e9', 'stroke-width': 1 });
+                    append('text', { ...font, x: left - 7, y: py + 4, 'text-anchor': 'end' }, tickText(value, step));
+                }
+
+                for (let i = 0; i <= 4; i++) {
+                    const value = durationMs * i / 4;
+                    const px = x(value);
+                    append('line', { x1: px, y1: top, x2: px, y2: bottom, stroke: '#e5eaf0', 'stroke-width': 1 });
+                    append('text', { ...font, x: px, y: bottom + 16, 'text-anchor': 'middle' }, format(value, 2));
+                }
+
+                append('path', { d: `M${left} ${top}V${bottom}H${right}`, fill: 'none', stroke: '#8997a4', 'stroke-width': 1.1 });
+                const timeLabel = append('text', { ...font, x: right, y: H - 1, 'text-anchor': 'end' });
+                timeLabel.appendChild(svgElement('tspan', { 'font-family': 'Cambria Math, Times New Roman, serif', 'font-style': 'italic' }, 't'));
+                timeLabel.appendChild(document.createTextNode(' [ms]'));
+
+                if (reference !== null) {
+                    append('line', { x1: left, y1: y(reference), x2: right, y2: y(reference), stroke: colors.reference, 'stroke-width': 1.6, 'stroke-dasharray': '6 4' });
+                }
+
+                for (const curve of curves) {
+                    const path = samples.map((p, i) => {
+                        const px = x(p.t);
+                        const py = y(p[curve.key] * curve.scale);
+                        return `${i === 0 ? 'M' : 'L'}${px.toFixed(2)} ${py.toFixed(2)}`;
+                    }).join(' ');
+                    append('path', {
+                        d: path,
+                        fill: 'none',
+                        stroke: curve.color,
+                        'stroke-width': 2.2,
+                        'stroke-dasharray': curve.dashed ? '6 3' : 'none',
+                        'stroke-linecap': 'round',
+                        'stroke-linejoin': 'round'
+                    });
+                }
+            }
+
+            function update() {
+                const mS = Number($('mS').value);
+                const mD = Number($('mD').value);
+                const cNmm = Number($('c').value);
+                const c = cNmm * 1000; // N/mm -> N/m
+                const a0 = Number($('a').value);
+                const durationMs = Number($('duration').value);
+                const duration = durationMs / 1000;
+                const omega = Math.sqrt(c / mD);
+
+                $('mSOut').textContent = `${format(mS)} kg`;
+                $('mDOut').textContent = `${format(mD)} kg`;
+                $('cOut').textContent = `${format(cNmm)} N/mm`;
+                $('aOut').textContent = `${format(a0)} m/s²`;
+                $('omega').textContent = `${format(omega, 1)} s⁻¹`;
+                $('period').textContent = `${format(2000 * Math.PI / omega, 2)} ms`;
+                $('maxRel').textContent = `${format(2000 * a0 / omega ** 2, 4)} mm`;
+
+                // Abtastung mit mindestens 80 Punkten je Schwingungsperiode.
+                const n = Math.max(500, Math.ceil(80 * omega * duration / (2 * Math.PI)));
+                const samples = Array.from({ length: n + 1 }, (_, i) => {
+                    const t = duration * i / n;
+                    return { t: t * 1000, ...model(t, mS, mD, c, a0) };
+                });
+                const relativeEquilibrium = -1000 * a0 / omega ** 2;
+                const meanForce = (mS + mD) * a0;
+                const maxForce = (mS + 2 * mD) * a0;
+
+                // Absolute Positionen: beide Kurven auf identischer Skala.
+                plot('positions', samples, [
+                    { key: 'xS', scale: 1000, color: colors.slide },
+                    { key: 'xD', scale: 1000, color: colors.nozzle, dashed: true }
+                ], durationMs, [0, 500 * a0 * duration ** 2]);
+
+                // Relative Verschiebung: eigene Skala macht kleine Abweichungen sichtbar.
+                plot('relative', samples, [
+                    { key: 'rel', scale: 1000, color: colors.nozzle }
+                ], durationMs, [2 * relativeEquilibrium, 0], relativeEquilibrium);
+
+                const showVelocity = $('kinMode').value === 'velocity';
+                $('kinTitle').textContent = showVelocity ? 'Geschwindigkeiten [mm/s]' : 'Beschleunigungen [m/s²]';
+                $('velocityLegend').style.display = showVelocity ? '' : 'none';
+                $('accelerationLegend').style.display = showVelocity ? 'none' : '';
+
+                if (showVelocity) {
+                    const maxVelocity = Math.max(...samples.map(p => Math.max(p.vS, p.vD))) * 1000;
+                    plot('kinematics', samples, [
+                        { key: 'vS', scale: 1000, color: colors.slide },
+                        { key: 'vD', scale: 1000, color: colors.nozzle, dashed: true }
+                    ], durationMs, [0, maxVelocity]);
+                } else {
+                    plot('kinematics', samples, [
+                        { key: 'aS', scale: 1, color: colors.slide },
+                        { key: 'aD', scale: 1, color: colors.nozzle, dashed: true }
+                    ], durationMs, [0, 2 * a0]);
+                }
+
+                // Vergleich mit der erforderlichen Kraft im starren Ersatzmodell.
+                plot('forcePlot', samples, [
+                    { key: 'F', scale: 1, color: colors.force }
+                ], durationMs, [0, maxForce], meanForce);
+            }
+
+            // Bedienelemente reagieren unmittelbar; keine Zeitintegration notwendig.
+            for (const id of parameterIds) {
+                $(id).addEventListener('input', update);
+            }
+            $('reset').addEventListener('click', () => {
+                for (const id of parameterIds) $(id).value = defaults[id];
+                update();
+            });
+
+            document.addEventListener('DOMContentLoaded', () => {
+                if (window.katex) {
+                    for (const el of document.querySelectorAll('[data-tex]')) {
+                        try {
+                            katex.render(el.dataset.tex, el, { throwOnError: true, trust: false });
+                        } catch (error) {
+                            console.error('KaTeX:', error);
+                        }
+                    }
+                } else {
+                    $('fontstatus').hidden = false;
+                }
+                update();
+            });
+
+            // Neuzeichnen beim Ändern der Größe des PowerPoint-Add-in-Fensters.
+            let resizeFrame = 0;
+            window.addEventListener('resize', () => {
+                cancelAnimationFrame(resizeFrame);
+                resizeFrame = requestAnimationFrame(update);
+            });
+
+            update();
+        </script>
+    </body>
+</html>
